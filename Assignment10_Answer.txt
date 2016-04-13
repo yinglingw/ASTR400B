@@ -1,0 +1,14 @@
+Part 1
+-
+-
+- The contours are noticeably different than the constant isopohotes they are supposedly tracing
+- I viewed the axial ratio in the XY plane to be q~0.83 and in the YZ plane to be q~0.91
+  These isophote contours shown in the .png files are self-consistent and definitely show variation over different radii.
+    Particularly in the XY plane the outer contours perhaps fit better than the inner ones
+-
+- I would describe the shape of the Bulge somewhere between oblate and triaxial. I am hesitant to commit definitively to either 
+      since the contour fitting and tilting was completely subjective.
+    My calculations showed the the ellipticity of the XY plane to be e=0.17 and YZ to be e=0.09
+    Since ellipticity is dependent on the same terms as the axial ratio, which I saw to be changing over radii, ellipticity, too, changes.
+    
+Part 2
