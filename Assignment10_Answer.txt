@@ -12,3 +12,18 @@ Part 1
     Since ellipticity is dependent on the same terms as the axial ratio, which I saw to be changing over radii, ellipticity, too, changes.
     
 Part 2
+-Average Velocity in x-dir =  -2.29 km/s
+Average Velocity in y-dir =  2.64 km/s
+Average Velocity in z-dir =  -2.29 km/s 
+
+Standard deviation in x-dir =  131.78
+Standard deviation in y-dir =  135.58
+Standard deviation in z-dir =  135.18 
+
+-The dispersion looks fairly close to each other in value, so yes I would say relatively isotropic.
+
+-Mass to half light in x-dir = 4.632026e+10 M_sun
+Mass to half light in y-dir = 4.902945e+10 M_sun
+Mass to half light in z-dir = 4.874642e+10 M_sun
+
+These light ratios are on order of magnitude similarity to what we calculated before ~2e10
