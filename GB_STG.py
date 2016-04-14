@@ -1,11 +1,11 @@
 # Will Yingling
 # April 2016
 
-
+from mpl_toolkits.mplot3d import Axes3D  # for 3D
 import numpy as np
+import matplotlib.pyplot as plt  # for 2D
+from matplotlib.colors import LogNorm  # for colors and scale
 
-# for 2D graphs
-import matplotlib.pyplot as plt
 
 # setting the global variable for gravitational constant
 def set_big_g():
@@ -20,6 +20,7 @@ def set_big_g():
 # dummy _var is just to ID which axis we are looking along
 def HernquistAccel(Mass, scale_rad, x, y, z, dummy_var):
 
+    # calc the radius
     radius = np.sqrt(x**2 + y**2 + z**2)
 
     # if x
@@ -44,10 +45,10 @@ def HernquistAccel(Mass, scale_rad, x, y, z, dummy_var):
 # x, y, z, are scalars
 # dummy _var is just to ID which axis we are looking along
 def MiyamotoNagaiAccel(Mass, rd, x, y, z, dummy_var):
-    #scale height
+    # scale height
     zd = rd / 5.
 
-    #buffer
+    # buffer parameter
     B = rd + np.sqrt(z*z + zd*zd)
 
     R = np.sqrt(x**2 + y**2)
@@ -79,10 +80,9 @@ def DynamicalFriction(Msat, x, y, z, vx, vy, vz, dummy):
     # v_circ = HernquistCircularSpeed(Msat, 62., r)
     v_circ = 240.
     b_max = r
-    b_min = G * Msat / v_circ**2  # 250 is circ speed
+    b_min = BIG_G * Msat / v_circ**2
 
     #TODO change the v_circ to changing Hern profile
-
 
     # in x dir
     if dummy == 0:
@@ -94,12 +94,13 @@ def DynamicalFriction(Msat, x, y, z, vx, vy, vz, dummy):
     if dummy == 2:
         component = vz
 
+    # calc the coloumb logarithm
     coloumb_log = np.log(b_max / b_min)
 
-    DF_accel = -0.428 * G * Msat * coloumb_log / (r**2 * v) * component
+    # calc the accel felt due to dyn fric
+    DF_accel = -0.428 * BIG_G * Msat * coloumb_log / (r**2 * v) * component
 
-
-    fudge = 0.75  # grumble grumble
+    fudge = 0.75  # "fudge factor" to account for tidal forces instead of a point mass
     DF_accel = DF_accel * fudge
 
     return DF_accel
@@ -121,11 +122,13 @@ def M31Accel(x, y, z, vx, vy, vz, dummy_var):
 
     sat_mass = 1.96e11
 
+    # find all the forces of friction
     halo_accel = HernquistAccel(mass_halo, radius_halo, x, y, z, dummy_var)
     bulge_accel = HernquistAccel(mass_bulge, radius_bulge, x, y, z, dummy_var)
     disk_accel = MiyamotoNagaiAccel(mass_disk, rd, x, y, z, dummy_var)
     fric_accel = DynamicalFriction(sat_mass, x, y, z, vx, vy, vz, dummy_var)
 
+    # sum the accels. DF is neg
     total_acceleration = halo_accel + bulge_accel + disk_accel + fric_accel
 
     return total_acceleration
@@ -172,7 +175,7 @@ def OrbitIntegrator(t_init, dt, t_final, file):
 
     if file == 1:
 
-     # SetUp2
+        # SetUp2
         x = -476. + 378.
         y = 491. - 611.
         z = -412. + 285.
@@ -183,7 +186,6 @@ def OrbitIntegrator(t_init, dt, t_final, file):
 
     open_future_M33.write("time x y z vx vy vz")
     open_future_M33.write("\n")
-    # COMP = [x, y, z, vx, vy, vz]
     COMP = [time, x, y, z, vx, vy, vz]
 
     # converting COMP to a string
@@ -192,16 +194,18 @@ def OrbitIntegrator(t_init, dt, t_final, file):
     open_future_M33.write("\n")
 
     while time < t_final-dt:
+        # Integrate, yo
         x_new, y_new, z_new, vx_new, vy_new, vz_new = LeapFrog(dt, x, y, z, vx, vy, vz)
         time += dt
-        # print("Integerator",  x_new, y_new, z_new)
+
         COMP = [time, x_new, y_new, z_new, vx_new, vy_new, vz_new]
 
-        # converting COMP to a string
+        # converting COMP to a string then writing to file
         COMP_to_str = " ".join(str(j) for j in COMP)
         open_future_M33.write(COMP_to_str)
         open_future_M33.write("\n")
 
+        # define calc'd values as current values
         x = x_new
         y = y_new
         z = z_new
@@ -235,6 +239,89 @@ def read_COM(filename):
     new_vz = data['vz']
 
     return time, new_x, new_y, new_z, new_vx, new_vy, new_vz
+
+
+# this reads in the COM files we made with Assigment 4
+def read_VHighRes(filename, COMfile):
+    # skip header is only 0 because
+    # it's the file I made with only 1 header line
+
+    PType = 2.
+
+    data = np.genfromtxt(filename, dtype=None, names=True, skip_header=3)
+
+    time_COM, x_COM, y_COM, z_COM, vx_COM, vy_COM, vz_COM = read_COM(COMfile)
+
+    indexID = np.where(data['type'] == PType)
+
+    Px = data['x'][indexID]
+    # store y position of particles
+    Py = data['y'][indexID]
+    # store z position of particles
+    Pz = data['z'][indexID]
+    # store x position of particles
+    Pvx = data['vx'][indexID]
+    # store y position of particles
+    Pvy = data['vy'][indexID]
+    # store z position of particles
+    Pvz = data['vz'][indexID]
+
+    new_x = Px - x_COM[0]
+    new_y = Py - y_COM[0]
+    new_z = Pz - z_COM[0]
+    new_vx = Pvx - vx_COM[0]
+    new_vy = Pvy - vy_COM[0]
+    new_vz = Pvz - vz_COM[0]
+
+    if PType == 1.:
+        M31_file = "Halo_of_M31.txt"
+    elif PType == 2.:
+        M31_file = "Disk_of_M31.txt"
+    elif PType == 3.:
+        M31_file = "Bulge_of_M31.txt"
+
+    open_M31_Bulge = open(M31_file, '+w')
+
+    open_M31_Bulge.write("x y z vx vy vz xCOM yCOM zCOM")
+    open_M31_Bulge.write("\n")
+
+    for i in range(len(new_x)):
+        # write info with COM at snap 000.
+        COMP = [new_x[i], new_y[i], new_z[i], new_vx[i], new_vy[i], new_vz[i], x_COM[0], y_COM[0], z_COM[0]]
+        # converting COMP to a string
+        COMP_to_str = " ".join(str(j) for j in COMP)
+        open_M31_Bulge.write(COMP_to_str)
+        open_M31_Bulge.write("\n")
+
+    open_M31_Bulge.close()
+
+    return new_x, new_y, new_z, new_vx, new_vy, new_vz, x_COM, y_COM, z_COM
+
+
+def read_bulge(filename):
+    # skip header is only 0 because
+    # it's the file I made with only 1 header line
+    data = np.genfromtxt(filename, dtype=None, names=True, skip_header=0)
+
+    new_x = data['x']
+    # store y position of particles
+    new_y = data['y']
+    # store z position of particles
+    new_z = data['z']
+    # store x position of particles
+    new_vx = data['vx']
+    # store y position of particles
+    new_vy = data['vy']
+    # store z position of particles
+    new_vz = data['vz']
+
+    x_COM = data['xCOM']
+    # store y position of particles
+    y_COM = data['yCOM']
+    # store z position of particles
+    z_COM = data['zCOM']
+
+    return new_x, new_y, new_z, new_vx, new_vy, new_vz, x_COM, y_COM, z_COM
 
 
 # file: txt file name
@@ -360,6 +447,33 @@ def MagnitudeVector(a, b, c, d, e, f):
     return mag_vec
 
 
+# to orient the viewing angle to something else
+# x and y are arrays
+# k is the amount of rotation in radians
+def tilt(x, y, k):
+    # initialize arrays
+    x_tilt = np.zeros(len(x))
+    y_tilt = np.zeros(len(y))
+
+    # rotate the viewing angle of the particles
+    for i in range(len(x)):
+        x_tilt[i] = x[i]*np.cos(k) - y[i]*np.sin(k)
+        y_tilt[i] = y[i]*np.cos(k) + x[i]*np.sin(k)
+
+    return x_tilt, y_tilt
+
+# calc the mass to half light ratio
+# std is standard deviation
+def mass_to_half_light(std):
+
+    r_half_light = 2.  # kpc
+    eta = 1.
+
+    mass_light = 6. * eta * r_half_light * std**2 / BIG_G
+
+    return mass_light
+
+
 #################
 # main function #
 #################
@@ -368,169 +482,153 @@ def main():
 
     # list with the necessary COM files generated from Assignment 4
     # if these haven't been made, find A4 and make them now
-    COM_file = ["COM_M31.txt", "COM_M33.txt"]  #, "COM_M33.txt"]
+    COM_file = ["COM_M31.txt", "COM_M33.txt"]  # , "COM_M33.txt"]
 
-    # gal_file = ["/Volumes/GALAXYM33/VLow_Res/M31_000.txt", "/Volumes/GALAXYM33/VLow_Res/M33_000.txt"]
+    gal_file = "M31_000.txt"
 
-    M31_halo_mass = 1.9e12
-    M31_disk_mass = 1.2e11
-    M31_bulge_mass = 1.9e10
+    # After the code is run once, it creates a file with the variable info
+    # so things go quicker. comment out the line below and uncomment the line with the corresponding file
+    xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_VHighRes(gal_file, COM_file[0])
+    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Halo_of_M31.txt")
+    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Disk_of_M31.txt")
+    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Bulge_of_M31.txt")
 
-    R = np.arange(0., 30., 0.5)
+    # define the amount of stretching in each dir for isophote contours
+    a_axisXY = [.6, 1.2, 1.8, 2.4, 3.6, 4.8]
+    b_axisXY = [0.5, 1., 1.5, 2., 3., 4.]
 
-    time, x_COM, y_COM, z_COM, vx_COM, vy_COM, vz_COM = read_COM(COM_file[0])
+    a_axisYZ = [0.5, 1., 1.5, 2., 3., 4.]
+    b_axisYZ = [0.55, 1.1, 1.65, 2.2, 3.3, 4.4]
 
-    M31_halo_scale_radius = 62.
-    M31_bulge_scale_radius = 1.0
-    M31_disk_scale_radius = 5.0
+    # q = minor_axis / major_axis
+    qXY = b_axisXY[0] / a_axisXY[0]
+    qYZ = a_axisYZ[0] / b_axisYZ[0]
 
+    # execute the tilting of the view
+    # last number is amount or rotation in radians
+    x_tiltXY, y_tiltXY = tilt(xx, yy, 0.05)
+    y_tiltYZ, z_tiltYZ = tilt(yy, zz, -0.15)
 
-    whole_hog = [  [ [[],[],[]], [[],[],[]], [[],[],[]] ], [ [[],[],[]], [[],[],[]] ]   ]
+    # for the contours
+    angle = np.linspace(0, 2*np.pi, 100)
 
-    M33_M31_r = []
-    M33_M31_v = []
-    M33_M31_r2 = []
-    M33_M31_v2 = []
-
-
-    # loop over the galaxies
-    for galaxy in range(len(COM_file)):
-
-        # print("in", COM_file[galaxy])
-        # read in the COM files we made earlier and assign variables
-        time, x_COM, y_COM, z_COM, vx_COM, vy_COM, vz_COM = read_COM(COM_file[galaxy])
-
-        # define the com with arrays of x, y, z
-        gal_COM_position = [x_COM, y_COM, z_COM]
-        gal_COM_velocity = [vx_COM, vy_COM, vz_COM]
-
-        if galaxy == 0:
-            M31_position = gal_COM_position
-            M31_velocity = gal_COM_velocity
-        if galaxy == 1:
-            M33_position = gal_COM_position
-            M33_velocity = gal_COM_velocity
-
-        """ this is for if you want a rot curve (takes a few minutes to run)
-        # loop throught the Ptypes
-        for PType in range(3):
-            # This processes takes a while to run
-            # so this print is just a visual confirmation that the script is running okay
-            print("Ptype", PType)
-
-            # pass into here for everything except for when the loop gets to M33's Bulge
-            if galaxy == 0 or galaxy == 1 and PType != 2:
-                # starting our calc at a reasonable value
-                kpc = 1.
-                # loop out to radius RADII
-                RADII = 31.
-
-                # loop from intial kpc to almost RADII
-                while kpc < RADII:
-
-                    radius = kpc
-
-                    # this is where the magic happens. or at least gets executed
-                    # this returns an array tot_mass(kpc) and mass_enclosed(kpc)
-                    # mass_enclosed(galaxy file, galaxy COM list, PType, snap, radius array)
-                    Pmass, mass_enc = mass_enclosed(gal_file[galaxy], gal_COM_position, float(PType)+1., 0, radius)
-
-                    # set the calc'd values to their corresponding locations in whole_hog
-                    whole_hog[galaxy][PType][0].append(radius)
-                    whole_hog[galaxy][PType][1].append(mass_enc)
-                    whole_hog[galaxy][PType][2].append(Pmass)
-
-                    # kpc is our counter so add one to prev value
-                    kpc += 1.
-            else:
-                pass
-
-    # define the corresponding values for M31
-    M31_DM_radius = whole_hog[0][0][0]
-    M31_DM_mass = whole_hog[0][0][1]
-    M31_DM_tot_mass = whole_hog[0][0][2]
-    M31_Disk_radius = whole_hog[0][1][0]
-    M31_Disk_mass = whole_hog[0][1][1]
-    M31_Disk_tot_mass = whole_hog[0][1][2]
-    M31_Bulge_radius = whole_hog[0][2][0]
-    M31_Bulge_mass = whole_hog[0][2][1]
-    M31_Bulge_tot_mass = whole_hog[0][2][2]
-
-    # calc the herquist profile of the galaxies
-    # hernquist(summed mass, radius array, buffer parameter a)
-    #    M33_hern = hernquist(M33_DM_tot_mass[0], M33_DM_radius, 24.5)
-    M31_hern = hernquist(M31_DM_tot_mass[0], M31_DM_radius, M31_halo_scale_radius)
-    #    MW_hern = hernquist(MW_DM_tot_mass[0], MW_DM_radius, 62.5)
-
-    # calculate the circular velocities of each PType for M31
-    # circular_speed(mass_enclosed array, radius array)
-    M31_DM_v_circ = circular_speed_hern(M31_halo_mass, M31_halo_scale_radius, M31_DM_radius)
-    M31_Disk_v_circ = circular_speed_hern(M31_disk_mass, M31_disk_scale_radius, M31_Disk_radius)
-    M31_Bulge_v_circ = circular_speed_hern(M31_bulge_mass, M31_bulge_scale_radius, M31_Bulge_radius)
-
-    # Calculate the rotation curves
-    # rotation_curve(DM ENCLOSED ARRAY, DISK ENCLOSED ARRAY, BULGE ARRAY, radius array)
-    #    M33_rot_curve = rotation_curve(M33_DM_mass, M33_Disk_mass, M33_Bulge_mass, M33_DM_radius)
-    M31_rot_curve = rotation_curve(M31_DM_v_circ, M31_Disk_v_circ, M31_Bulge_v_circ)
-    #    MW_rot_curve = rotation_curve(MW_DM_mass, MW_Disk_mass, MW_Bulge_mass, MW_DM_radius)
-
-    # plot the rotation curves of each component of M31
-    # DM, Disk, Bulge, Combined rotation
-    line15, = plt.plot(M31_DM_radius, M31_DM_v_circ, label="DM Hern")
-    line16, = plt.plot(M31_Disk_radius, M31_Disk_v_circ, label="Disk Hern")
-    line17, = plt.plot(M31_Bulge_radius, M31_Bulge_v_circ, label="Bulge Hern")
-    line18, = plt.plot(M31_DM_radius, M31_rot_curve, c='k', label="Rotation Curve Disk MN")
-    legend = plt.legend(handles=[line15, line16, line17, line18], loc=5)
-    plt.title("M31 Rotation curve")
-    plt.xlabel("M31 radius kpc")
-    plt.ylabel("M31 Vel km/s")
-    plt.ylim(40,250)
-    plt.show()
-    """
-
-    # for the two set ups
-    # Start at 0., dt=0.01, 10 Gyr, which set up
-    OrbitIntegrator(0., 0.01, 10., 0)
-    OrbitIntegrator(0., 0.01, 10., 1)
-
-    integration_file = "Future_M33_Opt1.txt"
-
-    time, xx, yy, zz, vxx, vyy, vzz = read_COM(integration_file)
-
-    integration_file2 = "Future_M33_Opt2.txt"
-
-    time2, xx2, yy2, zz2, vxx2, vyy2, vzz2 = read_COM(integration_file2)
-
-    total_position_circ = magnitude(xx, yy, zz)
-    total_velocity_circ = magnitude(vxx, vyy, vzz)
-    total_position = magnitude(xx2, yy2, zz2)
-    total_velocity = magnitude(vxx2, vyy2, vzz2)
-
-    fake_time = np.arange(0, 10, 0.014268)
-
-    r_sim = MagnitudeVector(M31_position[0], M31_position[1], M31_position[2], M33_position[0], M33_position[1], M33_position[2])
-    v_sim = MagnitudeVector(M31_velocity[0], M31_velocity[1], M31_velocity[2], M33_velocity[0], M33_velocity[1], M33_velocity[2])
-
-    line25, = plt.plot(fake_time, r_sim, label="M33 Belsa Sim")
-    line35, = plt.plot(time2, total_position, label="M33 Integrator")
-    line45, = plt.plot(time2, total_position_circ, label="M33 Position Circ")
-    legend = plt.legend(handles=[line25, line35,  line45], loc=5)
-    plt.title("M33 Pos vs Time")
-    plt.xlabel("time in Myr")
-    plt.ylabel("x in kpc")
-    # plt.xlim(0,10000)
-    plt.ylim(0,500)
+    # plot a density hist for XY plane with colors and contours
+    plt.hist2d(x_tiltXY, y_tiltXY, bins=10000, norm=LogNorm())
+    plt.plot(0.8, 0.1, '*', c='k')
+    plt.title("Plotting Bulge Particles Around M31 COM XY Plane q=" + str(qXY))
+    plt.xlabel("X (kpc)")
+    plt.ylabel("Y (kpc)")
+    plt.xlim(-5, 5)
+    plt.ylim(-5, 5)
+    plt.plot(a_axisXY[0]*np.cos(angle)+0.8, b_axisXY[0]*np.sin(angle)+0.1, c='r')
+    plt.plot(a_axisXY[1]*np.cos(angle)+0.8, b_axisXY[1]*np.sin(angle)+0.1, c='r')
+    plt.plot(a_axisXY[2]*np.cos(angle)+0.8, b_axisXY[2]*np.sin(angle)+0.1, c='r')
+    plt.plot(a_axisXY[3]*np.cos(angle)+0.8, b_axisXY[3]*np.sin(angle)+0.1, c='r')
+    plt.plot(a_axisXY[4]*np.cos(angle)+0.8, b_axisXY[4]*np.sin(angle)+0.1, c='r')
+    plt.plot(a_axisXY[5]*np.cos(angle)+0.8, b_axisXY[5]*np.sin(angle)+0.1, c='r')
+    plt.colorbar()
     plt.show()
 
-    line24, = plt.plot(fake_time, v_sim, label="M33 Besla Sim")
-    line34, = plt.plot(time2, total_velocity, label="M33 Integrator")
-    line44, = plt.plot(time2, total_velocity_circ, label="M33 Vel Circ")
-    legend = plt.legend(handles=[line24, line34, line44], loc="upper right")
-    plt.title("M33 Vel vs time")
-    plt.xlabel("time in Myr")
-    plt.ylabel("velocity in km/s")
-    # plt.xlim(0,10000)
-    plt.ylim(0,1000)
+    # plot a density hist for YZ plane with colors and contours
+    plt.hist2d(y_tiltYZ, z_tiltYZ, bins=10000, norm=LogNorm())
+    plt.plot(0., .5, '*', c='k')
+    plt.title("Plotting Bulge Particles Around M31 COM YZ Plane q=" + str(qYZ))
+    plt.xlabel("Y (kpc)")
+    plt.ylabel("Z (kpc)")
+    plt.xlim(-5, 5)
+    plt.ylim(-5, 5)
+    plt.plot(a_axisYZ[0]*np.cos(angle), b_axisYZ[0]*np.sin(angle)+0.5, c='r')
+    plt.plot(a_axisYZ[1]*np.cos(angle), b_axisYZ[1]*np.sin(angle)+0.5, c='r')
+    plt.plot(a_axisYZ[2]*np.cos(angle), b_axisYZ[2]*np.sin(angle)+0.5, c='r')
+    plt.plot(a_axisYZ[3]*np.cos(angle), b_axisYZ[3]*np.sin(angle)+0.5, c='r')
+    plt.plot(a_axisYZ[4]*np.cos(angle), b_axisYZ[4]*np.sin(angle)+0.5, c='r')
+    plt.plot(a_axisYZ[5]*np.cos(angle), b_axisYZ[5]*np.sin(angle)+0.5, c='r')
+    plt.colorbar()
+    plt.show()
+
+    # for next ~ 30 lines are 3D plot code copied from
+    # http://stackoverflow.com/questions/7819498/plotting-ellipsoid-with-matplotlib
+
+    # to make a 3D plot of the axial ratios
+    fig = plt.figure(figsize=plt.figaspect(1))  # Square figure
+    ax = fig.add_subplot(111, projection='3d')
+
+    coefs = (1.2, 1., 1.1)  # are our unique axial ratios
+    # Radii corresponding to the coefficients:
+    rx, ry, rz = 1. / np.sqrt(coefs)
+
+    # Set of all spherical angles:
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+
+    # Cartesian coordinates that correspond to the spherical angles:
+    # (this is the equation of an ellipsoid):
+    x = rx * np.outer(np.cos(u), np.sin(v))
+    y = ry * np.outer(np.sin(u), np.sin(v))
+    z = rz * np.outer(np.ones_like(u), np.cos(v))
+
+    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color='b')
+
+    # Adjustment of the axes, so that they all have the same span:
+    max_radius = max(rx, ry, rz)
+    for axis in 'xyz':
+        getattr(ax, 'set_{}lim'.format(axis))((-max_radius, max_radius))
+
+    plt.show()
+    # end copy
+
+    # print ellipticity
+    print("ellipticity of XY plane is e = ", round(1.-qXY, 2))
+    print("ellipticity of YZ plane is e = ", round(1.-qYZ, 2), "\n")
+
+    # variable args are arrays
+    radius_to_particle = np.sqrt(xx**2 + yy**2 + zz**2)
+    # find all particles within a given radius
+    indexID = np.where(radius_to_particle <= 10.)
+
+    # redefine vels with only particle within a given kpc of COM
+    vx_within_radius = vxx[indexID]
+    vy_within_radius = vyy[indexID]
+    vz_within_radius = vzz[indexID]
+
+    # calc avg of each vel component
+    vx_avg = np.average(vx_within_radius)
+    vy_avg = np.average(vy_within_radius)
+    vz_avg = np.average(vz_within_radius)
+
+    print("Average Velocity in x-dir = ", round(vx_avg, 2), "km/s")
+    print("Average Velocity in y-dir = ", round(vy_avg, 2), "km/s")
+    print("Average Velocity in z-dir = ", round(vz_avg, 2), "km/s", "\n")
+
+    # calc the standard deviation
+    vx_std = np.std(vx_within_radius)
+    vy_std = np.std(vy_within_radius)
+    vz_std = np.std(vz_within_radius)
+
+    print("Standard deviation in x-dir = ", round(vx_std, 2))
+    print("Standard deviation in y-dir = ", round(vy_std, 2))
+    print("Standard deviation in z-dir = ", round(vz_std, 2), "\n")
+
+    # calculate the mass to half light ratio
+    x_mass_light = mass_to_half_light(vx_std)
+    y_mass_light = mass_to_half_light(vy_std)
+    z_mass_light = mass_to_half_light(vz_std)
+
+    print("Mass to half light in x-dir = %e" % round(x_mass_light, 2), "M_sun")
+    print("Mass to half light in y-dir = %e" % round(y_mass_light, 2), "M_sun")
+    print("Mass to half light in z-dir = %e" % round(z_mass_light, 2), "M_sun\n")
+
+    # plot phase diagrams to show if rotation occurs
+    plt.scatter(xx, vyy, marker=".", label="Phase for x vs vy")
+    plt.title("Phase Diagram for all Disk particles x vx vy")
+    plt.xlabel("x (kpc)")
+    plt.ylabel("vy (km/s)")
+    plt.show()
+
+    plt.scatter(yy, vxx, marker=".", label="Phase for y vs vx")
+    plt.title("Phase Diagram for all Disk particles in y vx vx")
+    plt.xlabel("y (kpc)")
+    plt.ylabel("vx (km/s)")
     plt.show()
 
 if __name__ == '__main__':
