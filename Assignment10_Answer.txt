@@ -28,4 +28,6 @@ Mass to half light in z-dir = 4.874642e+10 M_sun
 
 These light ratios are on order of magnitude similarity to what we calculated before ~2e10.
 
--The phase diagrams show that the bulge is not significantly rotating, at least in comparison with the disk phase diagram. I think this is so because the bulge phase diagram shows there is not significant motion in the x or y direction. The disk phase diagram shows a large population of particles traveling at around 200 km/s on either side of the spatial axis. 
+-The phase diagrams show that the bulge is not significantly rotating, at least in comparison with the disk phase diagram. 
+I think this is so because the bulge phase diagram shows there is not significant motion in the x or y direction. 
+The disk phase diagram shows a large population of particles traveling at around 200 km/s on either side of the spatial axis. 
