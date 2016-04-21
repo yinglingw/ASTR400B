@@ -1,10 +1,18 @@
+ #!/usr/bin/env python -W ignore::DeprecationWarning
 # Will Yingling
 # April 2016
+
 
 from mpl_toolkits.mplot3d import Axes3D  # for 3D
 import numpy as np
 import matplotlib.pyplot as plt  # for 2D
 from matplotlib.colors import LogNorm  # for colors and scale
+import densitysmoothing as ds
+import matplotlib.animation as animation
+import warnings
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=DeprecationWarning)
 
 
 # setting the global variable for gravitational constant
@@ -12,7 +20,10 @@ def set_big_g():
     global BIG_G
     BIG_G = 4.498768e-6  # in kpc^3/M_sun/Gyr
 
-
+# setting the global variable for gravitational constant
+def set_RADIUS():
+    global RADIUS
+    RADIUS = 10.  # in kpc
 # Hernquist definition of acceleration
 # mass of the component we are looking at. scalar
 # some characeristic scale_radius
@@ -246,11 +257,15 @@ def read_VHighRes(filename, COMfile):
     # skip header is only 0 because
     # it's the file I made with only 1 header line
 
-    PType = 2.
+    PType = 1.
 
     data = np.genfromtxt(filename, dtype=None, names=True, skip_header=3)
 
     time_COM, x_COM, y_COM, z_COM, vx_COM, vy_COM, vz_COM = read_COM(COMfile)
+
+    x_COM_M33 = x_COM[700]
+    y_COM_M33 = y_COM[700]
+    z_COM_M33 = z_COM[700]
 
     indexID = np.where(data['type'] == PType)
 
@@ -266,13 +281,16 @@ def read_VHighRes(filename, COMfile):
     # store z position of particles
     Pvz = data['vz'][indexID]
 
-    new_x = Px - x_COM[0]
-    new_y = Py - y_COM[0]
-    new_z = Pz - z_COM[0]
-    new_vx = Pvx - vx_COM[0]
-    new_vy = Pvy - vy_COM[0]
-    new_vz = Pvz - vz_COM[0]
+    #TODO make this a for loop over all time.
+    new_x = Px #- x_COM[700]
+    new_y = Py #- y_COM[700]
+    new_z = Pz #- z_COM[700]
+    new_vx = Pvx #- vx_COM[700]
+    new_vy = Pvy #- vy_COM[700]
+    new_vz = Pvz #- vz_COM[700]
 
+
+    """
     if PType == 1.:
         M31_file = "Halo_of_M31.txt"
     elif PType == 2.:
@@ -294,34 +312,10 @@ def read_VHighRes(filename, COMfile):
         open_M31_Bulge.write("\n")
 
     open_M31_Bulge.close()
+    """
 
-    return new_x, new_y, new_z, new_vx, new_vy, new_vz, x_COM, y_COM, z_COM
+    return new_x, new_y, new_z, new_vx, new_vy, new_vz  # , x_COM, y_COM, z_COM
 
-
-def read_bulge(filename):
-    # skip header is only 0 because
-    # it's the file I made with only 1 header line
-    data = np.genfromtxt(filename, dtype=None, names=True, skip_header=0)
-
-    new_x = data['x']
-    # store y position of particles
-    new_y = data['y']
-    # store z position of particles
-    new_z = data['z']
-    # store x position of particles
-    new_vx = data['vx']
-    # store y position of particles
-    new_vy = data['vy']
-    # store z position of particles
-    new_vz = data['vz']
-
-    x_COM = data['xCOM']
-    # store y position of particles
-    y_COM = data['yCOM']
-    # store z position of particles
-    z_COM = data['zCOM']
-
-    return new_x, new_y, new_z, new_vx, new_vy, new_vz, x_COM, y_COM, z_COM
 
 
 # file: txt file name
@@ -380,14 +374,46 @@ def mass_enclosed(file, COM, PType, snap, radius):
 
 # calc magnitude
 # xx, yy, zz are arrays of the same size
-def magnitude(xx, yy, zz):
-    mag = []
+def find_wake(xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM, radius):
+    local_x = []
+    local_y = []
+    local_z = []
+
+    local_vxx = []
+    local_vyy = []
+    local_vzz = []
+
+    upper_bound_x = x_COM + radius
+    lower_bound_x = x_COM - radius
+
+    upper_bound_y = y_COM + radius
+    lower_bound_y = y_COM - radius
+
+    upper_bound_z = z_COM + radius
+    lower_bound_z = z_COM - radius
+
 
     for i in range(len(xx)):
-        m = np.sqrt(xx[i]**2 + yy[i]**2 + zz[i]**2)
-        mag.append(m)
 
-    return mag
+        m = np.sqrt((x_COM-xx[i])**2 + (y_COM-yy[i])**2 + (z_COM-zz[i])**2)
+
+        #if xx[i] <= upper_bound_x and xx[i] >= lower_bound_x:
+        if m <= radius:
+            x = xx[i] - x_COM
+            local_x.append(x)
+            local_vxx.append(vxx[i])
+
+        # if yy[i] <= upper_bound_y and yy[i] >= lower_bound_y:
+            y = yy[i] - y_COM
+            local_y.append(y)
+            local_vyy.append(vyy[i])
+
+        # if zz[i] <= upper_bound_z and zz[i] >= lower_bound_z:
+            z = zz[i] - z_COM
+            local_z.append(z)
+            local_vzz.append(vzz[i])
+
+    return local_x, local_y, local_z, local_vxx, local_vyy, local_vzz
 
 
 # return and array of the hernquist profile
@@ -462,37 +488,202 @@ def tilt(x, y, k):
 
     return x_tilt, y_tilt
 
-# calc the mass to half light ratio
-# std is standard deviation
-def mass_to_half_light(std):
 
-    r_half_light = 2.  # kpc
-    eta = 1.
 
-    mass_light = 6. * eta * r_half_light * std**2 / BIG_G
+# setting the global variable for gravitational constant
+def set_RADIUS():
+    global RADIUS
+    RADIUS = 20.  # in kpc
 
-    return mass_light
+def set_image_data(all_data):
+    global COUNT
+    COUNT = 0
 
+    global ImData
+    ImData = all_data
+
+def find_image_data():
+    current_plot_data = ImData[COUNT]
+    old_count = COUNT
+    global COUNT
+    COUNT = old_count + 1
+    return current_plot_data
 
 #################
 # main function #
 #################
 def main():
     set_big_g()
+    set_RADIUS()
+    print("Starting...")
+
+    #TODO find velocity vector
+    #TODO plot just the density of M33
+    # look near half mass radius
+    # cosider ohase diagram
+    # find how people ave looked for it.
 
     # list with the necessary COM files generated from Assignment 4
     # if these haven't been made, find A4 and make them now
-    COM_file = ["COM_M31.txt", "COM_M33.txt"]  # , "COM_M33.txt"]
+    COM_file = [ "COM_M33.txt" , "COM_M31.txt", "COM_MW.txt"]
 
-    gal_file = "M31_000.txt"
+    snap = 600
+    dir_path = "/Volumes/GALAXYM33/"
 
-    # After the code is run once, it creates a file with the variable info
-    # so things go quicker. comment out the line below and uncomment the line with the corresponding file
-    xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_VHighRes(gal_file, COM_file[0])
-    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Halo_of_M31.txt")
-    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Disk_of_M31.txt")
-    # xx, yy, zz, vxx, vyy, vzz, x_COM, y_COM, z_COM = read_bulge("Bulge_of_M31.txt")
+    images = []
+    images_data = []
 
+    while snap < 605:
+
+        if len(str(snap)) == 1:
+            MW_file = dir_path + "MW_00" + str(snap) + ".txt"
+            M31_file = dir_path + "M31_00" + str(snap) + ".txt"
+        elif len(str(snap)) == 2:
+            MW_file = dir_path + "MW_0" + str(snap) + ".txt"
+            M31_file = dir_path + "M31_0" + str(snap) + ".txt"
+        else:
+            MW_file = dir_path + "MW_" + str(snap) + ".txt"
+            M31_file = dir_path + "M31_" + str(snap) + ".txt"
+
+
+        #fig = plt.figure()
+        time, x_COM_M33, y_COM_M33, z_COM_M33, vx_COM_M33, vy_COM_M33, vz_COM_M33 = read_COM("COM_M33.txt")
+        time31, x_COM_M31, y_COM_M31, z_COM_M31, vx_COM_M31, vy_COM_M31, vz_COM_M31 = read_COM("COM_M31.txt")
+
+
+        x_M31, y_M31, z_M31, vx_M31, vy_M31, vz_M31 = read_VHighRes(M31_file, "COM_M33.txt")
+        x_MW, y_MW, z_MW, vx_MW, vy_MW, vz_MW = read_VHighRes(MW_file, "COM_M33.txt")
+
+
+        x_local_M31, y_local_M31, z_local_M31, vx_local_M31, vy_local_M31, vz_local_M31 = find_wake(x_M31, y_M31, z_M31, vx_M31, vy_M31, vz_M31, x_COM_M33[snap], y_COM_M33[snap], z_COM_M33[snap], RADIUS)
+        x_local_MW, y_local_MW, z_local_MW, vx_local_MW, vy_local_MW, vz_local_MW = find_wake(x_MW, y_MW, z_MW, vx_MW, vy_MW, vz_MW, x_COM_M33[snap], y_COM_M33[snap], z_COM_M33[snap], RADIUS)
+
+        x_local = x_local_M31 + x_local_MW
+        y_local = y_local_M31 + y_local_MW
+        z_local = z_local_M31 + z_local_MW
+        vx_local = vx_local_M31 + vx_local_MW
+        vy_local = vy_local_M31 + vy_local_MW
+        vz_local = vz_local_M31 + vz_local_MW
+
+
+
+        mag_vec = MagnitudeVector(vx_COM_M33[snap], vy_COM_M33[snap], vz_COM_M33[snap], vx_COM_M31[snap], vy_COM_M31[snap], vz_COM_M31[snap])
+
+        print("num of particles enclosed ", len(x_local))
+
+        rho_test = ds.grid(x_local, y_local, z_local, 100)
+
+        images_data.append(np.log10(rho_test.T))
+        #print('hewe5re')
+        # add mass component
+        figXY = plt.imshow(np.log10(rho_test.T), origin='lower',extent=[min(x_local), max(x_local), min(y_local), max(y_local)], cmap='spectral', animated=True)
+        plt.plot(0., 0., '*', c='k')
+        plt.plot(vx_COM_M33[snap]*2./mag_vec, vy_COM_M33[snap]*2./mag_vec, '+', c='k')
+        plt.xlabel("X (kpc)")
+        plt.ylabel("Y (kpc)")
+        plt.title("Density of Halo Particles at Snap " + str(snap))
+        # logarithmic
+        plt.colorbar()
+        plt.show()
+
+        plt.scatter(x_local, vy_local)
+        plt.title("X vs VY")
+        plt.show()
+
+        plt.scatter(y_local, vx_local)
+        plt.title("Y vs VX")
+        plt.show()
+
+
+        #Contours for the plot
+        file_name = "Wake_Snap" + str(snap) + ".png"
+        plt.savefig(file_name, dpi=600)
+        #plt.close()
+
+        images.append([figXY])
+        #print(images)
+
+        snap += 1
+
+    #plt.imshow(images[1], cmap='spectral')
+
+    #set_image_data(images_data)
+
+    fig = plt.figure()
+    ani = animation.FuncAnimation(fig, images, interval=50, blit=False, repeat_delay=1000)
+    # ani.save("Best_Animation_Ever.mp4", writer="ffmpeg")
+    plt.show()
+    # print(mag_vec)
+    # print(len(x_local), len(x_local_M31), len(x_local_MW))
+
+
+    """
+    bin_number = 30.
+    # plt.scatter(x_local, y_local)
+    plt.hist2d(x_local, z_local, bins=bin_number, norm=LogNorm())
+    plt.plot(0, 0, '*', c='k')
+    plt.xlabel("X (kpc)")
+    plt.ylabel("Z (kpc)")
+    # plt.plot(x_COM_M31[700], y_COM_M31[700], '*', c='k')
+    plt.colorbar()
+    plt.show()
+
+    plt.hist2d(y_local, z_local, bins=bin_number, norm=LogNorm())
+    plt.plot(0, 0, '*', c='k')
+    # plt.xlim(-radius+y_COM_M33[700], radius+y_COM_M33[700])
+    # plt.ylim(-radius+z_COM_M33[700], radius+z_COM_M33[700])
+    #plt.plot(y_COM_M31[700], z_COM_M31[700], '*', c='k')
+    plt.xlabel("Y (kpc)")
+    plt.ylabel("Z (kpc)")
+    plt.colorbar()
+    plt.show()
+
+    plt.hist2d(x_local, y_local, bins=bin_number, norm=LogNorm())
+    plt.plot(0, 0, '*', c='k')
+    plt.xlabel("X (kpc)")
+    plt.ylabel("Y (kpc)")
+    # plt.plot(x_COM_M31[700], y_COM_M31[700], '*', c='k')
+    plt.colorbar()
+    plt.show()
+
+    print(len(x_local))
+    Z = np.zeros(len(X))
+    rho_test = ds.grid(x_local, y_local, z_local, 100)
+    #plt.show()
+    figXY = plt.imshow(np.log10(rho_test.T), origin='lower',extent=[min(x_local), max(x_local), min(y_local), max(y_local)], cmap='spectral')
+    plt.plot(0., 0., '*', c='k')
+    plt.plot(vx_COM_M33[700]*2./mag_vec, vy_COM_M33[700]*2./mag_vec, '+', c='k')
+    plt.xlabel("X (kpc)")
+    plt.ylabel("Y (kpc)")
+    plt.colorbar()
+    plt.show()
+    """
+
+    # aniXY = animation.FuncAnimation(fig, flipbook, interval=50, frames=10, blit=True)
+    # plt.show()
+    """
+    rho_testYZ = ds.grid(y_local, z_local, x_local, 100)
+    #plt.show()
+    plt.imshow(np.log10(rho_testYZ.T), origin='lower',extent=[min(y_local), max(y_local), min(z_local), max(z_local)], cmap='spectral')
+    plt.plot(0., 0., '*', c='k')
+    plt.plot(vy_COM_M33[700]*2./mag_vec, vz_COM_M33[700]*2./mag_vec, '+', c='k')
+    plt.xlabel("Y (kpc)")
+    plt.ylabel("Z (kpc)")
+    plt.colorbar()
+    plt.show()
+
+    rho_testXZ = ds.grid(x_local, z_local, y_local, 100)
+    #plt.show()
+    plt.imshow(np.log10(rho_testXZ.T), origin='lower',extent=[min(x_local), max(x_local), min(z_local), max(z_local)], cmap='spectral')
+    plt.plot(0., 0., '*', c='k')
+    plt.plot(vx_COM_M33[700]*2./mag_vec, vz_COM_M33[700]*2./mag_vec, '+', c='k')
+    plt.xlabel("X (kpc)")
+    plt.ylabel("Z (kpc)")
+    plt.colorbar()
+    plt.show()
+    """
+
+    """
     # define the amount of stretching in each dir for isophote contours
     a_axisXY = [.6, 1.2, 1.8, 2.4, 3.6, 4.8]
     b_axisXY = [0.5, 1., 1.5, 2., 3., 4.]
@@ -546,37 +737,6 @@ def main():
     plt.colorbar()
     plt.show()
 
-    # for next ~ 30 lines are 3D plot code copied from
-    # http://stackoverflow.com/questions/7819498/plotting-ellipsoid-with-matplotlib
-
-    # to make a 3D plot of the axial ratios
-    fig = plt.figure(figsize=plt.figaspect(1))  # Square figure
-    ax = fig.add_subplot(111, projection='3d')
-
-    coefs = (1.2, 1., 1.1)  # are our unique axial ratios
-    # Radii corresponding to the coefficients:
-    rx, ry, rz = 1. / np.sqrt(coefs)
-
-    # Set of all spherical angles:
-    u = np.linspace(0, 2 * np.pi, 100)
-    v = np.linspace(0, np.pi, 100)
-
-    # Cartesian coordinates that correspond to the spherical angles:
-    # (this is the equation of an ellipsoid):
-    x = rx * np.outer(np.cos(u), np.sin(v))
-    y = ry * np.outer(np.sin(u), np.sin(v))
-    z = rz * np.outer(np.ones_like(u), np.cos(v))
-
-    ax.plot_surface(x, y, z,  rstride=4, cstride=4, color='b')
-
-    # Adjustment of the axes, so that they all have the same span:
-    max_radius = max(rx, ry, rz)
-    for axis in 'xyz':
-        getattr(ax, 'set_{}lim'.format(axis))((-max_radius, max_radius))
-
-    plt.show()
-    # end copy
-
     # print ellipticity
     print("ellipticity of XY plane is e = ", round(1.-qXY, 2))
     print("ellipticity of YZ plane is e = ", round(1.-qYZ, 2), "\n")
@@ -620,16 +780,64 @@ def main():
 
     # plot phase diagrams to show if rotation occurs
     plt.scatter(xx, vyy, marker=".", label="Phase for x vs vy")
-    plt.title("Phase Diagram for all Disk particles x vx vy")
+    plt.title("Phase Diagram for all Bulge particles x vx vy")
     plt.xlabel("x (kpc)")
     plt.ylabel("vy (km/s)")
     plt.show()
 
     plt.scatter(yy, vxx, marker=".", label="Phase for y vs vx")
-    plt.title("Phase Diagram for all Disk particles in y vx vx")
+    plt.title("Phase Diagram for all Bulge particles in y vx vx")
     plt.xlabel("y (kpc)")
     plt.ylabel("vx (km/s)")
     plt.show()
+    """
+    print('end')
+"""
+snap = 1
+
+def flipbook(*args):
+    global snap
+
+    snap += 1
+
+    dir_path = "/Volumes/GALAXYM33/"
+
+    if len(str(snap)) == 1:
+        MW_file = dir_path + "MW_00" + str(snap) + ".txt"
+        M31_file = dir_path + "M31_00" + str(snap) + ".txt"
+    elif len(str(snap)) == 2:
+        MW_file = dir_path + "MW_0" + str(snap) + ".txt"
+        M31_file = dir_path + "M31_0" + str(snap) + ".txt"
+    else:
+        MW_file = dir_path + "MW_" + str(snap) + ".txt"
+        M31_file = dir_path + "M31_" + str(snap) + ".txt"
+
+
+    time, x_COM_M33, y_COM_M33, z_COM_M33, vx_COM_M33, vy_COM_M33, vz_COM_M33 = read_COM("COM_M33.txt")
+    time31, x_COM_M31, y_COM_M31, z_COM_M31, vx_COM_M31, vy_COM_M31, vz_COM_M31 = read_COM("COM_M31.txt")
+
+    x_M31, y_M31, z_M31, vx_M31, vy_M31, vz_M31 = read_VHighRes(M31_file, "COM_M33.txt")
+    x_MW, y_MW, z_MW, vx_MW, vy_MW, vz_MW = read_VHighRes(MW_file, "COM_M33.txt")
+
+
+    x_local_M31, y_local_M31, z_local_M31 = find_wake(x_M31, y_M31, z_M31, x_COM_M33[snap], y_COM_M33[snap], z_COM_M33[snap], RADIUS)
+    x_local_MW, y_local_MW, z_local_MW = find_wake(x_MW, y_MW, z_MW, x_COM_M33[snap], y_COM_M33[snap], z_COM_M33[snap], RADIUS)
+
+    x_local = x_local_M31 + x_local_MW
+    y_local = y_local_M31 + y_local_MW
+    z_local = z_local_M31 + z_local_MW
+
+
+    mag_vec = MagnitudeVector(vx_COM_M33[snap], vy_COM_M33[snap], vz_COM_M33[snap], vx_COM_M31[snap], vy_COM_M31[snap], vz_COM_M31[snap])
+
+    print(len(x_local))
+    rho_test = ds.grid(x_local, y_local, z_local, 50)
+
+    figXY.set_array(np.log10(rho_test.T))
+
+    return figXY,
+"""
+
 
 if __name__ == '__main__':
     main()
